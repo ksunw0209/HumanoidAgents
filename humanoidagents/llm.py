@@ -105,7 +105,9 @@ class HuggingFaceLLM:
                     {"role": "user", "content": cot_prompt}
                 ])[0]["generated_text"][-1]['content']
                 print("LM Agent reasoned step by step with: " + cot_response)
-            response = self.pipe([{"role": "user", "content": prompt}, {"role": "assistant", "content": cot_response}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
+                response = self.pipe([{"role": "user", "content": prompt}, {"role": "assistant", "content": cot_response}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
+            else:
+                response = self.pipe([{"role": "user", "content": prompt}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
             return response
 
     @cache
