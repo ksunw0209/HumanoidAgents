@@ -127,7 +127,7 @@ class GenerativeAgent:
 
 
 
-    def initial_plan(self, curr_time, condition=None, max_attempts=5):
+    def initial_plan(self, curr_time, condition=None, max_attempts=10):
         """
         This creates a daily plan using a person's name, age, traits, and a self description and the latest plan
         """
@@ -199,7 +199,7 @@ Please FOLLOW the above Format EXACTLY. For example,
 
         self.memory.append(memory_item)
 
-    def recursively_decompose_plan(self, plan, curr_time, time_interval="1 hour", max_attempts=5):
+    def recursively_decompose_plan(self, plan, curr_time, time_interval="1 hour", max_attempts=10):
         ## using hourly plan (instead of whole plan) to obtain 15 minute plan can lead to more detailed plans, with less skipped intervals)
 
         # note we can even plan entire weeks or months or years with this recusive strategy
@@ -415,7 +415,7 @@ Output Plan in intervals of {time_interval}:
                 raise ValueError(f"Agent {self.name} not in Map")
         return location_nodes
 
-    def get_agent_location(self, activity, curr_time, world_location, max_attempts=5):
+    def get_agent_location(self, activity, curr_time, world_location, max_attempts=10):
         # currently assuming that everyone knows of a set of global locations
         # in paper, the locations that each user knows is based on where they have been to
         
@@ -754,7 +754,7 @@ Output Plan in intervals of {time_interval}:
             
         return curr_activity, next_activity
 
-    def get_15m_plan(self, curr_time, max_attempts=5):
+    def get_15m_plan(self, curr_time, max_attempts=10):
         curr_activity, next_activity = self.get_day_plan_current_and_next_activity(curr_time)
         date_nl = DatetimeNL.get_date_nl(curr_time)
 
