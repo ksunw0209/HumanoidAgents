@@ -97,7 +97,7 @@ class HuggingFaceLLM:
         n_retries = 10
         for i in range(n_retries):
             if self.cot:
-                cot_prompt = ("First, let's reason step-by-step about which plan of actions you should take "
+                cot_prompt = ("First, let's reason step-by-step about response to the input prompt "
                               "to maximize your believability as a human agent with the given background, "
                               "memories, and current status.")
                 cot_response = self.pipe([
