@@ -7,6 +7,9 @@ from functools import cache
 
 from sentence_transformers import SentenceTransformer
 
+import torch
+from transformers import pipeline, AutoTokenizer
+
 
 class OpenAILLM:
 
@@ -72,3 +75,44 @@ class MindsDBLLM(OpenAILLM):
         self.client = OpenAI(base_url="https://llm.mdb.ai", api_key=os.getenv("MINDSDB_API_KEY"))
         self.llm_model_name = llm_model_name
         self.embedding_model_name = embedding_model_name
+
+class HuggingFaceLLM:
+
+    def __init__(self, llm_model_name, embedding_model_name, cot=False):
+        self.llm_model_name = llm_model_name
+        self.pipe = pipeline(
+            "text-generation",
+            model=self.llm_model_name,
+            torch_dtype=torch.bfloat16,
+            max_new_tokens=1024,
+            device_map="auto",
+        )
+        if "Nemotron" in self.llm_model_name:
+            tokenizer  = AutoTokenizer.from_pretrained("nvidia/Nemotron-Mini-4B-Instruct")
+            self.pipe.tokenizer = tokenizer
+        self.embedding_model_name = embedding_model_name
+        self.cot = cot
+
+    def get_llm_response(self, prompt, max_tokens=1024, timeout=60):
+        n_retries = 10
+        for i in range(n_retries):
+            if self.cot:
+                cot_prompt = ("First, let's reason step-by-step about which plan of actions you should take "
+                              "to maximize your believability as a human agent with the given background, "
+                              "memories, and current status.")
+                cot_response = self.pipe([
+                    {"role": "user", "content": prompt},
+                    {"role": "user", "content": cot_prompt}
+                ])[0]["generated_text"][-1]['content']
+                print("LM Agent reasoned step by step with: " + cot_response)
+            response = self.pipe([{"role": "user", "content": prompt}, {"role": "assistant", "content": cot_response}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
+            return response
+
+    @cache
+    def get_embeddings(self, query):
+        response = openai.embeddings.create(
+            input=query,
+            model=self.embedding_model_name
+        )
+        embeddings = response.data[0].embedding
+        return embeddings

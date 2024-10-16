@@ -6,12 +6,14 @@ from functools import cache
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from humanoidagents.llm import OpenAILLM, LocalLLM, MindsDBLLM
+from humanoidagents.llm import OpenAILLM, LocalLLM, MindsDBLLM, HuggingFaceLLM
 from humanoidagents.utils import DatetimeNL
+
+import time
 
 class GenerativeAgent:
 
-    def __init__(self, name: str, description: str, age: int, traits: list, example_day_plan: str, llm_provider: str, llm_model_name: str, embedding_model_name: str):
+    def __init__(self, name: str, description: str, age: int, traits: list, example_day_plan: str, llm_provider: str, llm_model_name: str, embedding_model_name: str, cot: bool):
         self.name = name
         self.description = description
         self.age = age
@@ -37,8 +39,12 @@ class GenerativeAgent:
             self.LLM = OpenAILLM(llm_model_name=llm_model_name, embedding_model_name=embedding_model_name)
         elif llm_provider == "mindsdb":
             self.LLM = MindsDBLLM(llm_model_name=llm_model_name, embedding_model_name=embedding_model_name)
-        else:
+        elif llm_provider == "local":
             self.LLM = LocalLLM(llm_model_name=llm_model_name, embedding_model_name=embedding_model_name)
+        elif llm_provider == "hf":
+            self.LLM = HuggingFaceLLM(llm_model_name=llm_model_name, embedding_model_name=embedding_model_name, cot=cot)
+        else:
+            raise NotImplementedError(f"llm_provider {llm_provider} is invalid")
 
     @cache
     def plan(self, curr_time, condition=None):
@@ -121,7 +127,7 @@ class GenerativeAgent:
 
 
 
-    def initial_plan(self, curr_time, condition=None, max_attempts=10):
+    def initial_plan(self, curr_time, condition=None, max_attempts=5):
         """
         This creates a daily plan using a person's name, age, traits, and a self description and the latest plan
         """
@@ -137,15 +143,18 @@ class GenerativeAgent:
         prompt = f"""
 Please plan a day for {self.name} ending latest by 11:45 pm.
 
-Format:
-hh:mm am/pm: <activity>
-
 Name: {self.name} (age: {self.age})
 Innate traits: {', '.join(self.traits)}
 Description: {self.description}{condition_formatted}
 On {last_plan_time_nl}, 
 {last_plan_activity}
 On {date},
+
+Output Format:
+hh:mm am/pm: <activity>
+
+Please FOLLOW the above Format EXACTLY. For example,
+08:00 am: wake up and get ready for the day\n08:30 am: enjoy a cup of coffee and breakfast at home\n09:00 am: head to the Cheesecake Factory for her morning shift\n
 """
 
         #for re-planning from a certain time (e.g. 4:00 pm) onwards
@@ -157,7 +166,11 @@ On {date},
         
         attempts = 0
         while not GenerativeAgent.check_plan_format(resulting_plan) and attempts < max_attempts:
+            if attempts > 1 and "gpt" in self.LLM.llm_model_name:
+                time.sleep(10)
+
             resulting_plan = self.LLM.get_llm_response(prompt)
+            print(resulting_plan)
             if DatetimeNL.get_time_nl(curr_time) != "12:00 am":
                 resulting_plan = f"{DatetimeNL.get_time_nl(curr_time)}:" + resulting_plan
             
@@ -168,6 +181,7 @@ On {date},
             logging.info(resulting_plan)
 
         if attempts == max_attempts:
+            print(resulting_plan)
             raise ValueError("Initial Plan generation failed")
 
         self.add_to_memory(activity=resulting_plan, curr_time=curr_time, memory_type="day_plan")
@@ -185,15 +199,20 @@ On {date},
 
         self.memory.append(memory_item)
 
-    def recursively_decompose_plan(self, plan, curr_time, time_interval="1 hour", max_attempts=10):
+    def recursively_decompose_plan(self, plan, curr_time, time_interval="1 hour", max_attempts=5):
         ## using hourly plan (instead of whole plan) to obtain 15 minute plan can lead to more detailed plans, with less skipped intervals)
 
         # note we can even plan entire weeks or months or years with this recusive strategy
         prompt = f"""
 Please decompose the plan into items at intervals of {time_interval}, ending the day latest by 11:45 pm.
-Format: hh:mm am/pm: <activity>
 
-Plan: 
+Output Format:
+hh:mm am/pm: <activity>
+
+Please FOLLOW the above Format EXACTLY. For example,
+08:00 am: wake up and get ready for the day\n08:30 am: enjoy a cup of coffee and breakfast at home\n09:00 am: head to the Cheesecake Factory for her morning shift\n
+
+Example Plan: 
 6:00 am: woke up and completed the morning routine
 7:00 am: finished breakfast
 8:00 am: opened up The Willows Market and Pharmacy
@@ -205,7 +224,7 @@ Plan:
 9:00 pm: watched a movie with his son, Eddy
 10:00 pm: get ready for bed and slept
 
-Plan in intervals of 1 hour: 
+Example Plan in intervals of 1 hour: 
 6:00 am: woke up and completed the morning routine 
 7:00 am: finished breakfast 
 8:00 am: opened up The Willows Market and Pharmacy 
@@ -224,14 +243,18 @@ Plan in intervals of 1 hour:
 9:00 pm: watched a movie with his son, Eddy
 10:00 pm: got ready for bed and slept
 
-Plan: 
+Input Plan: 
 {plan}
-Plan in intervals of {time_interval}:
+
+Output Plan in intervals of {time_interval}:
 """
         
         resulting_plan = None
         attempts = 0
         while not GenerativeAgent.check_plan_format(resulting_plan) and attempts < max_attempts:
+            if attempts > 1 and "gpt" in self.LLM.llm_model_name:
+                time.sleep(10)
+
             resulting_plan = self.LLM.get_llm_response(prompt)
             if DatetimeNL.get_time_nl(curr_time) != "12:00 am":
                 resulting_plan = f"{DatetimeNL.get_time_nl(curr_time)}:" + resulting_plan
@@ -243,6 +266,7 @@ Plan in intervals of {time_interval}:
             logging.info(resulting_plan)
 
         if attempts == max_attempts:
+            print(resulting_plan)
             raise ValueError(f"Plan {time_interval} generation failed")
 
         self.add_to_memory(activity=resulting_plan, curr_time=curr_time, memory_type=f"{time_interval} plan")
@@ -410,6 +434,9 @@ Plan in intervals of {time_interval}:
         area = []
         attempts = 0
         while options and attempts < max_attempts:
+            if attempts > 1 and "gpt" in self.LLM.llm_model_name:
+                time.sleep(10)
+
             prompt = f"""
             {self_summary}
             {self.name} is currently in the {curr_location_str} that has {curr_location_children}
@@ -552,10 +579,13 @@ Plan in intervals of {time_interval}:
         last_i_before_curr_time = None
         for i, plan_item in enumerate(plan_items):
             entry_time_nl = ":".join(plan_item.split(":")[:2])
-            if DatetimeNL.convert_nl_datetime_to_datetime(date, entry_time_nl) <= curr_time:
-                last_i_before_curr_time = i
-            else:
-                break
+            try:
+                if DatetimeNL.convert_nl_datetime_to_datetime(date, entry_time_nl) <= curr_time:
+                    last_i_before_curr_time = i
+                else:
+                    break
+            except ValueError:
+                print(f"Invalid time format. date: {date}, entry_time_nl:{entry_time_nl}")
             
         if last_i_before_curr_time is not None:
             return '\n'.join(plan_items[last_i_before_curr_time:])
@@ -737,13 +767,17 @@ Plan in intervals of {time_interval}:
         attempts = 0
 
         while not GenerativeAgent.check_plan_format(resulting_plan) and not GenerativeAgent.check_plan_follow_time_start_and_end_and_15m_interval(resulting_plan, time_start_nl, time_end_nl, date_nl) and attempts < max_attempts:
+            if attempts > 1 and "gpt" in self.LLM.llm_model_name:
+                time.sleep(10)
+
             resulting_plan = GenerativeAgent.expand_plan_into_15m_intervals(self.LLM, curr_activity, next_activity, date_nl, time_interval=time_interval)
 
             attempts += 1
             logging.info(f"planning {time_interval} attempt number {attempts} / {max_attempts}")
             logging.info(resulting_plan)
 
-        # if attempts == max_attempts:
+        if attempts == max_attempts:
+            print(resulting_plan)
         #     raise ValueError(f"Get {time_interval} plan failed")
 
         fifteen_minute_plan_activity = [memory_item["activity"] for memory_item in self.memory if memory_item["memory_type"] == f"{time_interval} plan"]
@@ -864,7 +898,12 @@ Plan in intervals of {time_interval}:
             return '12:00 am: sleep'
         prompt = f"""
 Please detail the overarching activity ({activity_name}) into constituent activities (each starting with a verb) at intervals of {time_interval} between {time_start_nl} and {time_end_nl}. 
-Format: hh:mm am/pm: <activity>\n
+
+Output Format:
+hh:mm am/pm: <activity>
+
+Please FOLLOW the above Format EXACTLY. For example,
+08:00 am: wake up and get ready for the day\n08:30 am: enjoy a cup of coffee and breakfast at home\n09:00 am: head to the Cheesecake Factory for her morning shift\n
 """
         llm_response = LLM.get_llm_response(prompt)
         return GenerativeAgent.postprocess_expanded_15m_plan(llm_response, time_start_nl, time_end_nl, date_nl)

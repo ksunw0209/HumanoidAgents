@@ -22,10 +22,11 @@ parser.add_argument('-e', '--end_date', help='Enter end date (inclusive) by YYYY
 parser.add_argument("-c", "--condition", default=None, choices=["disgusted", "afraid", "sad", "surprised", "happy", "angry", "neutral", 
                                             "fullness", "social", "fun", "health", "energy", 
                                             "closeness_0", "closeness_5", "closeness_10", "closeness_15", None])
-parser.add_argument("-l", "--llm_provider", default="openai", choices=["openai", "local", "mindsdb"])
+parser.add_argument("-l", "--llm_provider", default="openai", choices=["openai", "local", "mindsdb", "hf"])
 parser.add_argument("-lmn", "--llm_model_name", default="gpt-3.5-turbo")
 parser.add_argument("-emn", "--embedding_model_name", default="text-embedding-ada-002", help="with local, please use all-MiniLM-L6-v2 or another name compatible with SentenceTransformers")
 parser.add_argument("-daf", "--daily_events_filename", default=None)
+parser.add_argument("-cot", "--use_cot", default=False)
 
 
 args = parser.parse_args()
@@ -43,7 +44,7 @@ llm_provider = args.llm_provider
 llm_model_name = args.llm_model_name
 embedding_model_name = args.embedding_model_name
 daily_events_filename = args.daily_events_filename
-
+cot = args.use_cot
 
 ## location
 generative_location = Location.from_yaml(map_filename)
@@ -61,6 +62,7 @@ for agent_filename in agent_filenames:
     agent_kwargs["llm_provider"] = llm_provider
     agent_kwargs["llm_model_name"] = llm_model_name
     agent_kwargs["embedding_model_name"] = embedding_model_name
+    agent_kwargs["cot"] = cot
     
     agent = HumanoidAgent(**agent_kwargs)
     agents.append(agent)

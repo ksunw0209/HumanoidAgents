@@ -60,7 +60,7 @@ def get_df_of_agent_activity_basic_status(filename_list):
                 one_dp[f"basicneeds_{key}"] = value
             agent_names = [agent['name'] for agent in data['agents']]
             for agent_name in agent_names:
-                one_dp[f"closeness_{agent_name}"] = agent["social_relationships"][agent_name]['closeness'] if "social_relationships" in agent and agent_name in agent["social_relationships"] else np.NaN
+                one_dp[f"closeness_{agent_name}"] = agent["social_relationships"][agent_name]['closeness'] if "social_relationships" in agent and agent_name in agent["social_relationships"] else np.nan
             all_data.append(one_dp)
     return pd.DataFrame.from_dict(all_data)
 

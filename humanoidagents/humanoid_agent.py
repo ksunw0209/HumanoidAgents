@@ -10,8 +10,8 @@ from humanoidagents.utils import DatetimeNL
 
 class HumanoidAgent(GenerativeAgent):
 
-    def __init__(self, name: str, description: str, age: int, traits: list, example_day_plan: str, social_relationships={}, basic_needs=None, emotion=None, llm_provider=None, llm_model_name=None, embedding_model_name=None):
-        super().__init__(name, description, age, traits, example_day_plan, llm_provider=llm_provider, llm_model_name=llm_model_name, embedding_model_name=embedding_model_name)
+    def __init__(self, name: str, description: str, age: int, traits: list, example_day_plan: str, social_relationships={}, basic_needs=None, emotion=None, llm_provider=None, llm_model_name=None, embedding_model_name=None, cot=None):
+        super().__init__(name, description, age, traits, example_day_plan, llm_provider=llm_provider, llm_model_name=llm_model_name, embedding_model_name=embedding_model_name, cot=cot)
 
         self.allow_emotion_changes = True if emotion is None else False
 
@@ -95,7 +95,12 @@ class HumanoidAgent(GenerativeAgent):
     def change_plans_helper(LLM, suggested_change, existing_plan):
         prompt = f"""
 Please use the suggested change ({suggested_change}) to edit activities in the original plan.
-Format: hh:mm am/pm: <activity within 10 words>
+
+Output Format:
+hh:mm am/pm: <activity>
+
+Please FOLLOW the above Format EXACTLY. For example,
+08:00 am: wake up and get ready for the day\n08:30 am: enjoy a cup of coffee and breakfast at home\n09:00 am: head to the Cheesecake Factory for her morning shift\n
 
 original plan: 
 {existing_plan}
@@ -112,7 +117,7 @@ updated plan:
         plan = '\n'.join([plan_item for plan_item in plan if plan_item.strip()])
         return plan
     
-    def change_plans(self, suggested_change, curr_time, max_attempts=10):
+    def change_plans(self, suggested_change, curr_time, max_attempts=5):
         existing_plan = self.get_plan_after_curr_time(curr_time)
         time_nl = DatetimeNL.get_time_nl(curr_time)
         plan = None
