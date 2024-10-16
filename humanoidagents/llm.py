@@ -95,17 +95,19 @@ class HuggingFaceLLM:
 
     def get_llm_response(self, prompt, max_tokens=1024, timeout=60):
         n_retries = 10
+        prompt += "Don't use any unnecessary highlights or special symbols. Try to obey the given format."
         for i in range(n_retries):
             if self.cot:
                 cot_prompt = ("First, let's reason step-by-step about response to the input prompt "
                               "to maximize your believability as a human agent with the given background, "
                               "memories, and current status.")
                 cot_response = self.pipe([
-                    {"role": "user", "content": prompt},
-                    {"role": "user", "content": cot_prompt}
+                    {"role": "user", "content": prompt + cot_prompt},
                 ])[0]["generated_text"][-1]['content']
                 print("LM Agent reasoned step by step with: " + cot_response)
-                response = self.pipe([{"role": "user", "content": prompt}, {"role": "assistant", "content": cot_response}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
+                response = self.pipe([
+                    {"role": "user", "content": prompt + cot_prompt}, {"role": "assistant", "content": cot_response}, {"role": "user", "content": prompt}
+                ], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
             else:
                 response = self.pipe([{"role": "user", "content": prompt}], do_sample=True, top_k=5)[0]["generated_text"][-1]['content']
             return response
