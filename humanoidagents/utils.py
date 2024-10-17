@@ -4,6 +4,8 @@ import yaml
 
 from collections import defaultdict
 from datetime import datetime, timedelta
+from dateutil import parser
+from dateutil.parser import ParserError
 
 def load_json_file(filename):
     with open(filename, "r", encoding="utf-8") as f:
@@ -91,8 +93,28 @@ class DatetimeNL:
         if len(time) != len("12:00 am"):
             time = "0" + time.upper()
         
-        concatenated_date_time = date + ' ' + time
-        curr_time = datetime.strptime(concatenated_date_time, "%A %b %d %Y %I:%M %p")
+        date_string = date + ' ' + time
+        original_error = None
+        try:
+            # First, try parsing with the original format
+            return datetime.strptime(date_string, "%A %b %d %Y %I:%M %p")
+        except ValueError as e:
+            original_error = str(e)
+            try:
+                # If that fails, try parsing with a 24-hour format
+                return datetime.strptime(date_string, "%A %b %d %Y %H:%M")
+            except ValueError:
+                try:
+                    # If both fail, use a more flexible parsing method
+                    return parser.parse(date_string)
+                except ParserError:
+                    # If dateutil parser fails, try a custom correction
+                    corrected_string = date_string.replace(" pm", "").replace(" am", "")
+                    try:
+                        return datetime.strptime(corrected_string, "%A %b %d %Y %H:%M")
+                    except ValueError:
+                        # If all parsing attempts fail, raise a custom error with the original error message
+                        raise ValueError(f"Unable to parse date string: {date_string}. Original error: {original_error}")
         return curr_time
 
     def subtract_15_min(curr_time):
